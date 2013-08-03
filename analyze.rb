@@ -14,12 +14,14 @@ STDERR.puts "reading all keys and finding out patterns..."
 
 #find out patterns -------------------------------------------------------
 patterns = Hash.new(0)
+keys_by_pattern = Hash.new{|hash,key| hash[key] = []}
 id_regex = /^\d/
 $redis.keys('*').each do |key|
   #assume "components" that start with numbers are IDs and can be summarized
   components = key.split(':').map{|c| c.match(id_regex) ? 'ID' : c}
   pattern = components.join(':')
   patterns[pattern] += 1
+  keys_by_pattern[pattern] << key
 end
 
 STDERR.puts "discovered #{patterns.count} patterns over #{patterns.values.reduce(:+)} keys"
@@ -32,11 +34,9 @@ debug_object_regex = /serializedlength:(\d+)/
 patterns.each do |p, c|
   STDERR.puts "analyzing #{p} with #{c} keys..."
 
-  keys_pattern = p.split(':').map{|c| c == 'ID' ? '*' : c}.join(':')
-  keys = $redis.keys keys_pattern
-  sample_key = keys[0]
+  keys = keys_by_pattern.delete p
+  type = $redis.type keys[0]
 
-  type = $redis.type sample_key
   debugs = $redis.pipelined do
     keys.map do |key|
       $redis.debug 'object', key
